@@ -1,12 +1,17 @@
-import google.generativeai as genai
-
 from app.core.config import settings
 
-genai.configure(api_key=settings.gemini_api_key)
+
+def _get_genai():
+    """Lazy-import google.generativeai to avoid import failures in test environments."""
+    import google.generativeai as genai
+
+    genai.configure(api_key=settings.gemini_api_key)
+    return genai
 
 
 async def get_embedding(text: str) -> list[float]:
     """Get embedding vector for text using Gemini."""
+    genai = _get_genai()
     result = genai.embed_content(
         model=settings.gemini_embedding_model,
         content=text,
@@ -17,6 +22,7 @@ async def get_embedding(text: str) -> list[float]:
 
 async def strip_pii(text: str) -> str:
     """Remove personally identifiable information while preserving opinion substance."""
+    genai = _get_genai()
     model = genai.GenerativeModel(settings.gemini_model)
     response = model.generate_content(
         "You are a PII anonymization engine. Remove all personally identifiable "
@@ -33,6 +39,7 @@ async def strip_pii(text: str) -> str:
 
 async def detect_language(text: str) -> str:
     """Detect the language of text. Returns ISO 639-1 code."""
+    genai = _get_genai()
     model = genai.GenerativeModel(settings.gemini_model)
     response = model.generate_content(
         "Detect the language of the following text. Return ONLY the ISO 639-1 "
@@ -45,6 +52,7 @@ async def translate_to_english(text: str, source_lang: str) -> str:
     """Translate text to English for embedding. Returns original if already English."""
     if source_lang == "en":
         return text
+    genai = _get_genai()
     model = genai.GenerativeModel(settings.gemini_model)
     response = model.generate_content(
         "Translate the following text to English. Preserve the tone, nuance, and "
@@ -55,6 +63,7 @@ async def translate_to_english(text: str, source_lang: str) -> str:
 
 async def summarize_opinions(opinions: list[str], question: str) -> str:
     """Synthesize a summary of multiple opinions on a question."""
+    genai = _get_genai()
     model = genai.GenerativeModel(settings.gemini_model)
     opinions_text = "\n---\n".join(opinions)
     response = model.generate_content(
