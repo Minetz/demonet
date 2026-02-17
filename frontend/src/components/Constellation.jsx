@@ -1,6 +1,12 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
+/** Derive the primary hue from a hash (same algorithm as Fingerprint.jsx). */
+function hashHue(hash) {
+  if (!hash || hash.length < 2) return 240;
+  return (parseInt(hash.slice(0, 2), 16) / 255) * 360;
+}
+
 export default function Constellation({ points, highlightHash }) {
   const svgRef = useRef();
 
@@ -42,7 +48,7 @@ export default function Constellation({ points, highlightHash }) {
       }
     }
 
-    // Draw points
+    // Tooltip
     const tooltip = d3
       .select('body')
       .append('div')
@@ -59,6 +65,7 @@ export default function Constellation({ points, highlightHash }) {
       .style('max-width', '250px')
       .style('z-index', 1000);
 
+    // Draw points with hash-derived colors (matches Fingerprint hue)
     svg
       .selectAll('circle')
       .data(points)
@@ -66,17 +73,24 @@ export default function Constellation({ points, highlightHash }) {
       .append('circle')
       .attr('cx', (d) => xScale(d.x))
       .attr('cy', (d) => yScale(d.y))
-      .attr('r', (d) => (d.hash === highlightHash ? 8 : 4))
-      .attr('fill', (d) =>
-        d.hash === highlightHash ? '#6366f1' : 'rgba(99, 102, 241, 0.5)'
-      )
-      .attr('stroke', (d) =>
-        d.hash === highlightHash ? '#818cf8' : 'none'
-      )
+      .attr('r', (d) => (d.hash === highlightHash ? 8 : 4.5))
+      .attr('fill', (d) => {
+        const hue = hashHue(d.hash);
+        return d.hash === highlightHash
+          ? `hsl(${hue}, 80%, 65%)`
+          : `hsla(${hue}, 70%, 60%, 0.6)`;
+      })
+      .attr('stroke', (d) => {
+        if (d.hash !== highlightHash) return 'none';
+        const hue = hashHue(d.hash);
+        return `hsl(${hue}, 70%, 75%)`;
+      })
       .attr('stroke-width', 2)
-      .style('filter', (d) =>
-        d.hash === highlightHash ? 'drop-shadow(0 0 8px rgba(99, 102, 241, 0.6))' : 'none'
-      )
+      .style('filter', (d) => {
+        if (d.hash !== highlightHash) return 'none';
+        const hue = hashHue(d.hash);
+        return `drop-shadow(0 0 8px hsla(${hue}, 80%, 60%, 0.6))`;
+      })
       .style('cursor', 'pointer')
       .on('mouseover', (event, d) => {
         tooltip
