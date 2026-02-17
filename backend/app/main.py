@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.api.routes import router
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.share import share_router
 
 
 @asynccontextmanager
@@ -35,6 +36,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+app.include_router(share_router)
 
 
 @app.get("/health")

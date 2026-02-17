@@ -1,7 +1,30 @@
+import { useState } from 'react';
 import Fingerprint from './Fingerprint';
 
 export default function ResultCard({ result }) {
+  const [copied, setCopied] = useState(false);
+
   if (!result) return null;
+
+  const shareUrl = `${window.location.origin}/s/${result.hash}`;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for non-HTTPS contexts
+      const input = document.createElement('input');
+      input.value = shareUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div className="w-full max-w-2xl mx-auto mt-8 space-y-6 animate-fade-in">
@@ -89,10 +112,16 @@ export default function ResultCard({ result }) {
         </div>
       )}
 
-      {/* Share prompt */}
-      <div className="text-center pt-4">
-        <p className="text-[var(--color-text-dim)] text-sm">
-          Share your signature: <span className="font-mono text-[var(--color-accent)]">#{result.hash}</span>
+      {/* Share */}
+      <div className="text-center pt-4 space-y-3">
+        <button
+          onClick={copyLink}
+          className="px-5 py-2.5 rounded-xl bg-[var(--color-accent)] text-white text-sm font-semibold hover:brightness-110 transition-all cursor-pointer"
+        >
+          {copied ? 'Link copied!' : 'Copy share link'}
+        </button>
+        <p className="text-[var(--color-text-dim)] text-xs font-mono">
+          {shareUrl}
         </p>
       </div>
     </div>
