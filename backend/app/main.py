@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.api.routes import router
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.share import share_router
 
 
@@ -33,6 +34,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+app.add_middleware(
+    RateLimitMiddleware,
+    read_limit=60,     # 60 GET requests per minute per IP
+    write_limit=10,    # 10 POST requests per minute per IP
+    window_seconds=60,
 )
 
 app.include_router(router, prefix="/api")

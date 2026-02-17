@@ -85,12 +85,27 @@ def mock_gemini():
 
 @pytest.fixture
 def client(db_session):
-    """HTTPX async client wired to test DB."""
+    """HTTPX async client wired to test DB. Resets rate limiter each test."""
     from httpx import ASGITransport, AsyncClient
+
+    from app.middleware.rate_limit import RateLimitMiddleware
 
     async def override_get_db():
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Reset rate limiter state between tests
+    for middleware in app.user_middleware:
+        if middleware.cls is RateLimitMiddleware:
+            break
+    # Walk the middleware stack to find and reset the rate limiter
+    mw = app.middleware_stack
+    while mw is not None:
+        if isinstance(mw, RateLimitMiddleware):
+            mw.reset()
+            break
+        mw = getattr(mw, "app", None)
+
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
