@@ -1,30 +1,48 @@
+"""AI service using Gemini REST API directly via httpx (no SDK dependency)."""
+import httpx
+
 from app.core.config import settings
 
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
 
-def _get_genai():
-    """Lazy-import google.generativeai to avoid import failures in test environments."""
-    import google.generativeai as genai
 
-    genai.configure(api_key=settings.gemini_api_key)
-    return genai
+async def _generate(prompt: str) -> str:
+    """Call Gemini generateContent REST endpoint."""
+    url = f"{GEMINI_BASE}/{settings.gemini_model}:generateContent"
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            params={"key": settings.gemini_api_key},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
 
 
 async def get_embedding(text: str) -> list[float]:
-    """Get embedding vector for text using Gemini."""
-    genai = _get_genai()
-    result = genai.embed_content(
-        model=settings.gemini_embedding_model,
-        content=text,
-        task_type="SEMANTIC_SIMILARITY",
-    )
-    return result["embedding"]
+    """Get embedding vector for text using Gemini REST API."""
+    url = f"{GEMINI_BASE}/{settings.gemini_embedding_model}:embedContent"
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            url,
+            params={"key": settings.gemini_api_key},
+            json={
+                "model": settings.gemini_embedding_model,
+                "content": {"parts": [{"text": text}]},
+                "taskType": "SEMANTIC_SIMILARITY",
+            },
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data["embedding"]["values"]
 
 
 async def strip_pii(text: str) -> str:
     """Remove personally identifiable information while preserving opinion substance."""
-    genai = _get_genai()
-    model = genai.GenerativeModel(settings.gemini_model)
-    response = model.generate_content(
+    result = await _generate(
         "You are a PII anonymization engine. Remove all personally identifiable "
         "information from the following text (names, locations, emails, phone numbers, "
         "addresses, specific organizations, dates of birth, any identifying details) "
@@ -34,39 +52,33 @@ async def strip_pii(text: str) -> str:
         "nothing else.\n\n"
         f"Text: {text}"
     )
-    return response.text.strip()
+    return result.strip()
 
 
 async def detect_language(text: str) -> str:
     """Detect the language of text. Returns ISO 639-1 code."""
-    genai = _get_genai()
-    model = genai.GenerativeModel(settings.gemini_model)
-    response = model.generate_content(
+    result = await _generate(
         "Detect the language of the following text. Return ONLY the ISO 639-1 "
         f"language code (e.g., 'en', 'es', 'ja', 'ar'). Nothing else.\n\n{text}"
     )
-    return response.text.strip().lower()[:2]
+    return result.strip().lower()[:2]
 
 
 async def translate_to_english(text: str, source_lang: str) -> str:
     """Translate text to English for embedding. Returns original if already English."""
     if source_lang == "en":
         return text
-    genai = _get_genai()
-    model = genai.GenerativeModel(settings.gemini_model)
-    response = model.generate_content(
+    result = await _generate(
         "Translate the following text to English. Preserve the tone, nuance, and "
         f"meaning as faithfully as possible. Return ONLY the translation.\n\n{text}"
     )
-    return response.text.strip()
+    return result.strip()
 
 
 async def summarize_opinions(opinions: list[str], question: str) -> str:
     """Synthesize a summary of multiple opinions on a question."""
-    genai = _get_genai()
-    model = genai.GenerativeModel(settings.gemini_model)
     opinions_text = "\n---\n".join(opinions)
-    response = model.generate_content(
+    result = await _generate(
         f"You are summarizing global opinions on the question: '{question}'\n\n"
         f"Here are anonymized opinions from people around the world:\n{opinions_text}\n\n"
         "Provide a concise synthesis that:\n"
@@ -76,4 +88,4 @@ async def summarize_opinions(opinions: list[str], question: str) -> str:
         "4. Does NOT take sides or express a preference\n"
         "Keep it under 200 words."
     )
-    return response.text.strip()
+    return result.strip()
