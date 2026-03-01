@@ -9,20 +9,23 @@ function hashHue(hash) {
 
 export default function Constellation({ points, highlightHash }) {
   const svgRef = useRef();
+  const tooltipRef = useRef();
 
   useEffect(() => {
     if (!points || points.length === 0) return;
 
     const svg = d3.select(svgRef.current);
-    const width = svgRef.current.clientWidth;
+    const width = svgRef.current.clientWidth || 600;
     const height = 400;
 
     svg.attr('viewBox', `0 0 ${width} ${height}`);
     svg.selectAll('*').remove();
 
-    // Scale points to fit
+    // Scale points to fit — guard against degenerate extents (all same value)
     const xExtent = d3.extent(points, (d) => d.x);
     const yExtent = d3.extent(points, (d) => d.y);
+    if (xExtent[0] === xExtent[1]) { xExtent[0] -= 1; xExtent[1] += 1; }
+    if (yExtent[0] === yExtent[1]) { yExtent[0] -= 1; yExtent[1] += 1; }
     const xScale = d3.scaleLinear().domain(xExtent).range([60, width - 60]);
     const yScale = d3.scaleLinear().domain(yExtent).range([60, height - 60]);
 
@@ -48,22 +51,8 @@ export default function Constellation({ points, highlightHash }) {
       }
     }
 
-    // Tooltip
-    const tooltip = d3
-      .select('body')
-      .append('div')
-      .attr('class', 'constellation-tooltip')
-      .style('position', 'absolute')
-      .style('background', 'var(--color-surface)')
-      .style('border', '1px solid var(--color-border)')
-      .style('border-radius', '8px')
-      .style('padding', '8px 12px')
-      .style('font-size', '12px')
-      .style('color', 'var(--color-text)')
-      .style('pointer-events', 'none')
-      .style('opacity', 0)
-      .style('max-width', '250px')
-      .style('z-index', 1000);
+    // Tooltip — use a stable ref, not body-append, to avoid leaks
+    const tooltip = d3.select(tooltipRef.current);
 
     // Draw points with hash-derived colors (matches Fingerprint hue)
     svg
@@ -94,23 +83,20 @@ export default function Constellation({ points, highlightHash }) {
       .style('cursor', 'pointer')
       .on('mouseover', (event, d) => {
         tooltip
-          .style('opacity', 1)
+          .style('opacity', '1')
           .html(
             `<strong>#${d.hash}</strong>${d.region ? ` &middot; ${d.region}` : ''}<br/>${d.text_preview}`
           );
       })
       .on('mousemove', (event) => {
+        const rect = svgRef.current.getBoundingClientRect();
         tooltip
-          .style('left', event.pageX + 12 + 'px')
-          .style('top', event.pageY - 28 + 'px');
+          .style('left', event.clientX - rect.left + 12 + 'px')
+          .style('top', event.clientY - rect.top - 28 + 'px');
       })
       .on('mouseout', () => {
-        tooltip.style('opacity', 0);
+        tooltip.style('opacity', '0');
       });
-
-    return () => {
-      d3.selectAll('.constellation-tooltip').remove();
-    };
   }, [points, highlightHash]);
 
   if (!points || points.length === 0) {
@@ -128,8 +114,26 @@ export default function Constellation({ points, highlightHash }) {
       <h3 className="text-sm font-semibold text-[var(--color-text-dim)] mb-2">
         Opinion constellation ({points.length} voices)
       </h3>
-      <div className="rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden">
+      <div className="rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden relative">
         <svg ref={svgRef} className="w-full" style={{ height: 400 }} />
+        {/* Tooltip rendered inside the container — no body leak */}
+        <div
+          ref={tooltipRef}
+          style={{
+            position: 'absolute',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '8px 12px',
+            fontSize: '12px',
+            color: 'var(--color-text)',
+            pointerEvents: 'none',
+            opacity: 0,
+            maxWidth: '250px',
+            zIndex: 10,
+            transition: 'opacity 0.1s',
+          }}
+        />
       </div>
     </div>
   );

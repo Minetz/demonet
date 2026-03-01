@@ -1,24 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import OpinionForm from './components/OpinionForm';
 import ResultCard from './components/ResultCard';
 import Constellation from './components/Constellation';
-import { fetchCurrentQuestion, submitOpinion, fetchVisualization } from './api';
+import { fetchCurrentQuestion, submitOpinion, fetchVisualization, fetchSummary } from './api';
 
 function App() {
   const [question, setQuestion] = useState(null);
   const [result, setResult] = useState(null);
   const [visData, setVisData] = useState(null);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const pollRef = useRef(null);
+
+  const refreshVis = () =>
+    fetchVisualization()
+      .then((data) => {
+        setVisData(data);
+        // Fetch summary once we have enough opinions
+        if (data?.total_opinions >= 3) {
+          fetchSummary().then(setSummary).catch(() => {});
+        }
+      })
+      .catch(() => {});
 
   useEffect(() => {
     fetchCurrentQuestion()
       .then(setQuestion)
       .catch(() => setError('Could not load question. Is the API running?'));
 
-    fetchVisualization()
-      .then(setVisData)
-      .catch(() => {}); // Silently fail — no opinions yet is fine
+    refreshVis();
+
+    // Poll every 30 s for live updates
+    pollRef.current = setInterval(refreshVis, 30_000);
+    return () => clearInterval(pollRef.current);
   }, []);
 
   const handleSubmit = async (text, region) => {
@@ -27,9 +42,7 @@ function App() {
     try {
       const res = await submitOpinion(text, region);
       setResult(res);
-      // Refresh visualization
-      const vis = await fetchVisualization();
-      setVisData(vis);
+      await refreshVis();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -76,11 +89,30 @@ function App() {
         </>
       )}
 
+      {/* Opinion count */}
+      {visData?.total_opinions > 0 && (
+        <p className="text-xs text-[var(--color-text-dim)] mt-6 tracking-wide">
+          {visData.total_opinions} {visData.total_opinions === 1 ? 'voice' : 'voices'} from around the world
+        </p>
+      )}
+
       {/* Constellation visualization */}
       <Constellation
         points={visData?.points || []}
         highlightHash={result?.hash}
       />
+
+      {/* Global summary */}
+      {summary && (
+        <div className="w-full max-w-2xl mx-auto mt-6 p-5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)]">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--color-text-dim)] mb-3">
+            What the world thinks
+          </h3>
+          <p className="text-sm text-[var(--color-text)] leading-relaxed">
+            {summary.summary}
+          </p>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="mt-16 text-center text-xs text-[var(--color-text-dim)]">
